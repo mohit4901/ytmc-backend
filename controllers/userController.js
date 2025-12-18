@@ -2,77 +2,154 @@ import userModel from "../models/userModel.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 
-// Generate JWT
-const generateToken = (user) => {
+// ======================
+// JWT GENERATOR
+// ======================
+const generateToken = (user, isAdmin = false) => {
   return jwt.sign(
-    { id: user._id, role: user.role },
+    {
+      id: user._id,
+      role: user.role
+    },
     process.env.JWT_SECRET,
-    { expiresIn: "7d" }
+    { expiresIn: isAdmin ? "1d" : "7d" }
   );
 };
+
+// ======================
+// REGISTER USER
+// ======================
 export const registerUser = async (req, res) => {
   try {
-   
-    if (!req.body || Object.keys(req.body).length === 0) {
-      return res.json({
-        success: false,
-        message: "Empty request body. Send name, email, password."
-      });
-    }
-
     const { name, email, password } = req.body;
 
     if (!name || !email || !password) {
-      return res.json({
+      return res.status(400).json({
         success: false,
-        message: "name, email, password are required."
+        message: "Name, email and password are required"
       });
     }
 
-    const exist = await userModel.findOne({ email });
-    if (exist) return res.json({ success: false, message: "Email already exists" });
+    const exists = await userModel.findOne({ email });
+    if (exists) {
+      return res.status(409).json({
+        success: false,
+        message: "Email already registered"
+      });
+    }
 
-    const hashed = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, 10);
 
-    const newUser = await userModel.create({ name, email, password: hashed });
+    const user = await userModel.create({
+      name,
+      email,
+      password: hashedPassword,
+      role: "user"
+    });
 
-    res.json({ success: true, token: generateToken(newUser) });
+    return res.status(201).json({
+      success: true,
+      token: generateToken(user)
+    });
 
-  } catch (err) {
-    res.json({ success: false, message: err.message });
+  } catch (error) {
+    console.error("Register Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error"
+    });
   }
 };
 
-
+// ======================
+// LOGIN USER
+// ======================
 export const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
 
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Email and password required"
+      });
+    }
+
     const user = await userModel.findOne({ email });
-    if (!user) return res.json({ success: false, message: "User not found" });
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found"
+      });
+    }
 
     const match = await bcrypt.compare(password, user.password);
-    if (!match) return res.json({ success: false, message: "Incorrect password" });
+    if (!match) {
+      return res.status(401).json({
+        success: false,
+        message: "Incorrect password"
+      });
+    }
 
-    res.json({ success: true, token: generateToken(user) });
-  } catch (err) {
-    res.json({ success: false, message: err.message });
+    return res.status(200).json({
+      success: true,
+      token: generateToken(user)
+    });
+
+  } catch (error) {
+    console.error("Login Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error"
+    });
   }
 };
 
+// ======================
+// ADMIN LOGIN
+// ======================
 export const adminLogin = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    const admin = await userModel.findOne({ email, role: "admin" });
-    if (!admin) return res.json({ success: false, message: "Admin not found" });
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Email and password required"
+      });
+    }
+
+    const admin = await userModel.findOne({
+      email,
+      role: "admin"
+    });
+
+    if (!admin) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized"
+      });
+    }
 
     const match = await bcrypt.compare(password, admin.password);
-    if (!match) return res.json({ success: false, message: "Incorrect password" });
+    if (!match) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized"
+      });
+    }
 
-    res.json({ success: true, token: generateToken(admin) });
-  } catch (err) {
-    res.json({ success: false, message: err.message });
+    return res.status(200).json({
+      success: true,
+      token: generateToken(admin, true)
+    });
+
+  } catch (error) {
+    console.error("Admin Login Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error"
+    });
   }
 };
 
