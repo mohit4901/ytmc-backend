@@ -32,7 +32,7 @@ app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ extended: true }));
 
 // =====================
-// CORS CONFIG
+// CORS CONFIG (EXPRESS 5 SAFE)
 // =====================
 const ALLOWED_ORIGINS = [
   process.env.CLIENT_ORIGIN,
@@ -49,11 +49,10 @@ app.use(
   cors({
     origin: (origin, callback) => {
       if (!origin || ALLOWED_ORIGINS.includes(origin)) {
-        callback(null, true);
-      } else {
-        console.log("❌ BLOCKED ORIGIN:", origin);
-        callback(new Error("CORS blocked"));
+        return callback(null, true);
       }
+      console.log("❌ BLOCKED ORIGIN:", origin);
+      return callback(null, false); // IMPORTANT: don't throw
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -61,8 +60,13 @@ app.use(
   })
 );
 
-// 🔴 VERY IMPORTANT (Preflight)
-app.options("*", cors());
+// ✅ EXPRESS 5 SAFE PREFLIGHT HANDLER
+app.use((req, res, next) => {
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(204);
+  }
+  next();
+});
 
 // =====================
 // SOCKET.IO SETUP
@@ -121,4 +125,3 @@ server.listen(port, () => {
   console.log(`🚀 Server running on port ${port}`);
   console.log(`LOCAL URL: ${LOCAL_URL}`);
 });
-
