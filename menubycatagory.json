@@ -1,0 +1,28 @@
+{
+    "Chai": [
+      { "name": "Teri Simple Chai", "price": 30 },
+      { "name": "Meri Special Chai", "price": 40 },
+      { "name": "Bombay Cutting Chai", "price": 35 }
+    ],
+    "Hot Coffee": [
+      { "name": "Simple Hot Coffee", "price": 50 },
+      { "name": "Strong Hot Coffee", "price": 55 }
+    ],
+    "Cold Coffee": [
+      { "name": "Simple Cold Coffee", "price": 65 },
+      { "name": "Strong Cold Coffee", "price": 75 }
+    ],
+    "Mocktail": [
+      { "name": "Mocktail Virgin", "price": 75 },
+      { "name": "Fresh Lime Soda", "price": 75 }
+    ],
+    "Milk Shake": [
+      { "name": "Mango Shake", "price": 90 },
+      { "name": "Litchi Shake", "price": 90 }
+    ],
+    "Pizza": [
+      { "name": "Cheese Pizza", "price": 110 },
+      { "name": "Paneer Pizza", "price": 140 }
+    ]
+  }
+  
