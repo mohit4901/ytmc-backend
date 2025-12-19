@@ -20,10 +20,12 @@ const port = process.env.PORT || 4000;
 const LOCAL_URL = `http://localhost:${port}`;
 
 // =====================
-// CONNECT SERVICES
+// CONNECT SERVICES (ONCE)
 // =====================
 connectDB();
 connectCloudinary();
+
+app.disable("x-powered-by");
 
 // =====================
 // PARSERS
@@ -32,7 +34,7 @@ app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ extended: true }));
 
 // =====================
-// CORS CONFIG (EXPRESS 5 SAFE)
+// CORS CONFIG
 // =====================
 const ALLOWED_ORIGINS = [
   process.env.CLIENT_ORIGIN,
@@ -41,10 +43,6 @@ const ALLOWED_ORIGINS = [
   "http://localhost:5174"
 ].filter(Boolean);
 
-console.log("DEBUG CLIENT_ORIGIN =", process.env.CLIENT_ORIGIN);
-console.log("DEBUG ADMIN_ORIGIN  =", process.env.ADMIN_ORIGIN);
-console.log("DEBUG ALLOWED_ORIGINS =", ALLOWED_ORIGINS);
-
 app.use(
   cors({
     origin: (origin, callback) => {
@@ -52,7 +50,7 @@ app.use(
         return callback(null, true);
       }
       console.log("❌ BLOCKED ORIGIN:", origin);
-      return callback(null, false); // IMPORTANT: don't throw
+      return callback(null, false);
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -60,16 +58,21 @@ app.use(
   })
 );
 
-// ✅ EXPRESS 5 SAFE PREFLIGHT HANDLER
+// OPTIONS safe handler
 app.use((req, res, next) => {
-  if (req.method === "OPTIONS") {
-    return res.sendStatus(204);
-  }
+  if (req.method === "OPTIONS") return res.sendStatus(204);
   next();
 });
 
 // =====================
-// SOCKET.IO SETUP
+// KEEP-ALIVE ROUTE (ANTI SLEEP)
+// =====================
+app.get("/api/health", (req, res) => {
+  res.status(200).json({ status: "ok", uptime: process.uptime() });
+});
+
+// =====================
+// SOCKET.IO (FAST)
 // =====================
 const server = http.createServer(app);
 
@@ -79,7 +82,7 @@ const io = new Server(server, {
     methods: ["GET", "POST"],
     credentials: true
   },
-  transports: ["websocket", "polling"]
+  transports: ["websocket"] // 🚀 NO POLLING
 });
 
 app.set("io", io);
@@ -89,7 +92,6 @@ io.on("connection", (socket) => {
 
   socket.on("join_kitchen", () => {
     socket.join("kitchen");
-    console.log("🍳 Kitchen joined:", socket.id);
   });
 
   socket.on("disconnect", () => {
@@ -109,19 +111,16 @@ app.use("/api/restaurant-order", restaurantOrderRouter);
 app.use("/api/menu", menuRouter);
 
 // =====================
-// TEST ROUTE
+// ROOT TEST
 // =====================
 app.get("/", (req, res) => {
-  res.send(`
-    <h2>API Working – Teri Meri Chai ☕</h2>
-    <p>Server Running at <strong>${LOCAL_URL}</strong></p>
-  `);
+  res.send("API Working – Ye Teri Meri Chai ☕");
 });
 
 // =====================
-// START SERVER
+// START
 // =====================
 server.listen(port, () => {
-  console.log(`🚀 Server running on port ${port}`);
-  console.log(`LOCAL URL: ${LOCAL_URL}`);
+  console.log(`🚀 Server running on ${LOCAL_URL}`);
 });
+
