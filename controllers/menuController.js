@@ -23,6 +23,12 @@ export const addMenuItem = async (req, res) => {
   }
 };
 
+
+const menu = await menuItemModel.find({});
+console.log("MENU COUNT:", menu.length);
+
+
+
 // List items
 export const listMenuItems = async (req, res) => {
   try {
