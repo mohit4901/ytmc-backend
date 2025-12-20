@@ -34,23 +34,38 @@ app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ extended: true }));
 
 // =====================
-// CORS CONFIG
+// CORS CONFIG (FINAL)
 // =====================
 const ALLOWED_ORIGINS = [
-  process.env.CLIENT_ORIGIN,
-  process.env.ADMIN_ORIGIN,
+  // Local
   "http://localhost:5173",
-  "http://localhost:5174"
+  "http://localhost:5174",
+
+  // Production
+  "https://www.ytmc.co.in",
+  "https://ytmc.co.in",
+
+  // Optional deployments
+  "https://ytmc-frontend.vercel.app",
+  "https://ytmc-admin.vercel.app",
+
+  // Env based
+  process.env.CLIENT_ORIGIN,
+  process.env.ADMIN_ORIGIN
 ].filter(Boolean);
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+      // Allow Postman / server-to-server / health checks
+      if (!origin) return callback(null, true);
+
+      if (ALLOWED_ORIGINS.includes(origin)) {
         return callback(null, true);
       }
-      console.log("❌ BLOCKED ORIGIN:", origin);
-      return callback(null, false);
+
+      console.log("❌ CORS BLOCKED:", origin);
+      return callback(new Error("Not allowed by CORS"));
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -58,21 +73,21 @@ app.use(
   })
 );
 
-// OPTIONS safe handler
-app.use((req, res, next) => {
-  if (req.method === "OPTIONS") return res.sendStatus(204);
-  next();
-});
+// ✅ Proper OPTIONS handling
+app.options("*", cors());
 
 // =====================
-// KEEP-ALIVE ROUTE (ANTI SLEEP)
+// KEEP-ALIVE ROUTE
 // =====================
 app.get("/api/health", (req, res) => {
-  res.status(200).json({ status: "ok", uptime: process.uptime() });
+  res.status(200).json({
+    status: "ok",
+    uptime: process.uptime()
+  });
 });
 
 // =====================
-// SOCKET.IO (FAST)
+// SOCKET.IO SETUP
 // =====================
 const server = http.createServer(app);
 
@@ -82,7 +97,7 @@ const io = new Server(server, {
     methods: ["GET", "POST"],
     credentials: true
   },
-  transports: ["websocket"] // 🚀 NO POLLING
+  transports: ["websocket"] // 🚀 fast & stable
 });
 
 app.set("io", io);
@@ -118,7 +133,7 @@ app.get("/", (req, res) => {
 });
 
 // =====================
-// START
+// START SERVER
 // =====================
 server.listen(port, () => {
   console.log(`🚀 Server running on ${LOCAL_URL}`);
