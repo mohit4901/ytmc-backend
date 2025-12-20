@@ -9,11 +9,13 @@ export const placeOrder = async (req, res) => {
 
     const razorpay = createRazorpayInstance();
 
+    // 1️⃣ Create Razorpay order (external – thoda slow)
     const rpOrder = await razorpay.orders.create({
       amount: total * 100,
       currency: "INR"
     });
 
+    // 2️⃣ Save order in DB
     const order = await orderModel.create({
       user: req.userId,
       items,
@@ -22,9 +24,22 @@ export const placeOrder = async (req, res) => {
       razorpayOrderId: rpOrder.id
     });
 
-    res.json({ success: true, orderId: order._id, rpOrder });
+    // 🔥 3️⃣ INSTANT SOCKET EMIT (NO DELAY)
+    const io = req.app.get("io");
+    if (io) {
+      io.to("kitchen").emit("new-order", order);
+    }
+
+    // 4️⃣ Respond immediately
+    res.status(201).json({
+      success: true,
+      orderId: order._id,
+      rpOrder
+    });
+
   } catch (err) {
-    res.json({ success: false, message: err.message });
+    console.error("Place order error:", err);
+    res.status(500).json({ success: false, message: err.message });
   }
 };
 
