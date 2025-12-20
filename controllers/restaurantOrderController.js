@@ -12,11 +12,10 @@ export const createRazorpayOrder = async (req, res) => {
       !tableNumber ||
       !customer?.name ||
       !customer?.phone ||
-      !items ||
-      items.length === 0 ||
+      !items?.length ||
       !amount
     ) {
-      return res.json({
+      return res.status(400).json({
         success: false,
         message: "Missing required fields"
       });
@@ -33,32 +32,28 @@ export const createRazorpayOrder = async (req, res) => {
     const total = subtotal + tax;
 
     // ===============================
-    // 🔥 DAILY ORDER NUMBER
+    // 🔥 DAILY ORDER NUMBER (OPTIMISED)
     // ===============================
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
+    const lastOrder = await restaurantOrderModel
+      .findOne({}, { dailyOrderNumber: 1 })
+      .sort({ createdAt: -1 });
 
-    const endOfDay = new Date();
-    endOfDay.setHours(23, 59, 59, 999);
-
-    const lastOrderToday = await restaurantOrderModel
-      .findOne({
-        createdAt: { $gte: startOfDay, $lte: endOfDay }
-      })
-      .sort({ dailyOrderNumber: -1 });
-
-    const dailyOrderNumber = lastOrderToday
-      ? lastOrderToday.dailyOrderNumber + 1
+    const dailyOrderNumber = lastOrder
+      ? lastOrder.dailyOrderNumber + 1
       : 1;
 
-    // 🔹 RAZORPAY
+    // ===============================
+    // RAZORPAY
+    // ===============================
     const razorpay = createRazorpayInstance();
     const rpOrder = await razorpay.orders.create({
       amount: total * 100,
       currency: "INR"
     });
 
-    // 🔹 SAVE ORDER
+    // ===============================
+    // SAVE ORDER
+    // ===============================
     const order = await restaurantOrderModel.create({
       dailyOrderNumber,
       tableNumber,
@@ -80,7 +75,14 @@ export const createRazorpayOrder = async (req, res) => {
       razorpayOrderId: rpOrder.id
     });
 
-    res.json({
+    // 🔥🔥 INSTANT SOCKET EMIT (NO WAIT)
+    const io = req.app.get("io");
+    if (io) {
+      io.to("kitchen").emit("new-order", order);
+    }
+
+    // 🔥 FAST RESPONSE
+    res.status(201).json({
       success: true,
       razorpayOrder: rpOrder,
       orderId: order._id
@@ -88,34 +90,26 @@ export const createRazorpayOrder = async (req, res) => {
 
   } catch (err) {
     console.error("Create Order Error:", err);
-    res.json({ success: false, message: err.message });
+    res.status(500).json({ success: false, message: err.message });
   }
 };
 
 // ===============================
-// VERIFY PAYMENT
+// VERIFY PAYMENT (LIGHTWEIGHT)
 // ===============================
 export const verifyRazorpayPayment = async (req, res) => {
   try {
     const { orderId, razorpayPaymentId, razorpaySignature } = req.body;
 
-    const order = await restaurantOrderModel.findByIdAndUpdate(
-      orderId,
-      {
-        status: "paid",
-        razorpayPaymentId,
-        razorpaySignature
-      },
-      { new: true }
-    );
-
-    // 🔥 SEND FULL ORDER TO KITCHEN
-    const io = req.app.get("io");
-    io.to("kitchen").emit("new-order", order);
+    await restaurantOrderModel.findByIdAndUpdate(orderId, {
+      status: "paid",
+      razorpayPaymentId,
+      razorpaySignature
+    });
 
     res.json({ success: true });
   } catch (err) {
-    res.json({ success: false, message: err.message });
+    res.status(500).json({ success: false, message: err.message });
   }
 };
 
@@ -130,7 +124,7 @@ export const listRestaurantOrders = async (req, res) => {
 
     res.json({ success: true, data: orders });
   } catch (err) {
-    res.json({ success: false, message: err.message });
+    res.status(500).json({ success: false, message: err.message });
   }
 };
 
@@ -148,11 +142,13 @@ export const updateRestaurantOrderStatus = async (req, res) => {
     );
 
     const io = req.app.get("io");
-    io.to("kitchen").emit("order-updated", order);
+    if (io) {
+      io.to("kitchen").emit("order-updated", order);
+    }
 
     res.json({ success: true });
   } catch (err) {
-    res.json({ success: false, message: err.message });
+    res.status(500).json({ success: false, message: err.message });
   }
 };
 
@@ -164,23 +160,23 @@ export const deleteRestaurantOrder = async (req, res) => {
     const { id } = req.params;
 
     const deletedOrder = await restaurantOrderModel.findByIdAndDelete(id);
-
     if (!deletedOrder) {
-      return res.json({
+      return res.status(404).json({
         success: false,
         message: "Order not found"
       });
     }
 
     const io = req.app.get("io");
-    io.to("kitchen").emit("order-deleted", { orderId: id });
+    if (io) {
+      io.to("kitchen").emit("order-deleted", { orderId: id });
+    }
 
     res.json({
       success: true,
       message: "Order deleted successfully"
     });
   } catch (err) {
-    console.error("Delete Order Error:", err);
-    res.json({ success: false, message: err.message });
+    res.status(500).json({ success: false, message: err.message });
   }
 };
