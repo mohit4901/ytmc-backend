@@ -18,27 +18,27 @@ import menuRouter from "./routes/menuRoute.js";
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-// =====================
-// PERFORMANCE BASICS
-// =====================
+/* =====================================================
+   PERFORMANCE & STABILITY
+===================================================== */
 app.disable("x-powered-by");
 app.set("trust proxy", 1);
 
-// =====================
-// CONNECT SERVICES (ONCE)
-// =====================
+/* =====================================================
+   CONNECT SERVICES (ONCE)
+===================================================== */
 connectDB();
 connectCloudinary();
 
-// =====================
-// PARSERS (FAST)
-// =====================
+/* =====================================================
+   BODY PARSERS (FAST)
+===================================================== */
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: false }));
 
-// =====================
-// CORS (RENDER SAFE)
-// =====================
+/* =====================================================
+   CORS (RENDER SAFE & FAST)
+===================================================== */
 const ALLOWED_ORIGINS = [
   "http://localhost:5173",
   "http://localhost:5174",
@@ -54,28 +54,32 @@ const ALLOWED_ORIGINS = [
 app.use(
   cors({
     origin: (origin, cb) => {
-      if (!origin) return cb(null, true);
+      if (!origin) return cb(null, true); // Postman / server calls
       if (ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
       return cb(null, false);
     },
-    credentials: true
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    allowedHeaders: ["Content-Type", "Authorization"]
   })
 );
 
-// =====================
-// HEALTH CHECK (KEEP ALIVE)
-// =====================
-app.get("/api/health", (req, res) => {
+/* =====================================================
+   HEALTH CHECK (KEEP RENDER AWAKE)
+===================================================== */
+app.get("/api/health", (_, res) => {
   res.status(200).json({ status: "ok" });
 });
 
-// =====================
-// SOCKET.IO (FAST MODE)
-// =====================
+/* =====================================================
+   SOCKET.IO (ULTRA FAST)
+===================================================== */
 const server = http.createServer(app);
 
 const io = new Server(server, {
-  transports: ["websocket"], // 🔥 polling removed
+  transports: ["websocket"], // 🔥 no polling = no delay
+  pingTimeout: 20000,
+  pingInterval: 25000,
   cors: {
     origin: ALLOWED_ORIGINS,
     credentials: true
@@ -96,9 +100,9 @@ io.on("connection", (socket) => {
   });
 });
 
-// =====================
-// ROUTES
-// =====================
+/* =====================================================
+   ROUTES
+===================================================== */
 app.use("/api/reviews", reviewRouter);
 app.use("/api/user", userRouter);
 app.use("/api/product", productRouter);
@@ -107,16 +111,16 @@ app.use("/api/order", orderRouter);
 app.use("/api/restaurant-order", restaurantOrderRouter);
 app.use("/api/menu", menuRouter);
 
-// =====================
-// ROOT
-// =====================
-app.get("/", (req, res) => {
+/* =====================================================
+   ROOT
+===================================================== */
+app.get("/", (_, res) => {
   res.send("API Working – Ye Teri Meri Chai ☕");
 });
 
-// =====================
-// START
-// =====================
+/* =====================================================
+   START SERVER
+===================================================== */
 server.listen(PORT, () => {
   console.log(`🚀 Render server running on port ${PORT}`);
 });
