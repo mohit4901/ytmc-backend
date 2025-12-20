@@ -34,7 +34,7 @@ app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ extended: true }));
 
 // =====================
-// CORS CONFIG (NODE 22 SAFE)
+// CORS CONFIG (PROD SAFE)
 // =====================
 const ALLOWED_ORIGINS = [
   // Local
@@ -44,36 +44,36 @@ const ALLOWED_ORIGINS = [
   // Production
   "https://www.ytmc.co.in",
   "https://ytmc.co.in",
-
-  // Optional
   "https://ytmc-frontend.vercel.app",
   "https://ytmc-admin.vercel.app",
 
+  // Env based
   process.env.CLIENT_ORIGIN,
   process.env.ADMIN_ORIGIN
 ].filter(Boolean);
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // allow Postman / server calls
-      if (!origin) return callback(null, true);
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Allow server-to-server / Postman
+    if (!origin) return callback(null, true);
 
-      if (ALLOWED_ORIGINS.includes(origin)) {
-        return callback(null, true);
-      }
+    if (ALLOWED_ORIGINS.includes(origin)) {
+      return callback(null, true);
+    }
 
-      console.log("❌ CORS BLOCKED:", origin);
-      return callback(new Error("Not allowed by CORS"));
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "token"]
-  })
-);
+    console.log("❌ CORS BLOCKED:", origin);
+    return callback(null, false);
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "token"]
+};
 
-// ⚠️ IMPORTANT
-// ❌ app.options("*", cors());  <-- DO NOT USE (Node 22 crash)
+// 🔥 Main CORS middleware
+app.use(cors(corsOptions));
+
+// 🔥 Preflight handling (Vercel + Browser FIX)
+app.options("*", cors(corsOptions));
 
 // =====================
 // HEALTH CHECK
@@ -106,6 +106,7 @@ io.on("connection", (socket) => {
 
   socket.on("join_kitchen", () => {
     socket.join("kitchen");
+    console.log("🍳 Kitchen joined:", socket.id);
   });
 
   socket.on("disconnect", () => {
