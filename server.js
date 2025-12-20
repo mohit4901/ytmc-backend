@@ -16,29 +16,28 @@ import restaurantOrderRouter from "./routes/restaurantOrderRoute.js";
 import menuRouter from "./routes/menuRoute.js";
 
 const app = express();
-const port = process.env.PORT || 4000;
-const LOCAL_URL = `http://localhost:${port}`;
+const PORT = process.env.PORT || 4000;
 
 // =====================
-// PERFORMANCE TWEAKS
+// PERFORMANCE BASICS
 // =====================
 app.disable("x-powered-by");
-app.set("trust proxy", 1); // 🔥 Faster + correct IPs on Vercel
+app.set("trust proxy", 1);
 
 // =====================
-// CONNECT SERVICES
+// CONNECT SERVICES (ONCE)
 // =====================
 connectDB();
 connectCloudinary();
 
 // =====================
-// PARSERS (Optimised)
+// PARSERS (FAST)
 // =====================
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: false }));
 
 // =====================
-// CORS CONFIG (Vercel SAFE)
+// CORS (RENDER SAFE)
 // =====================
 const ALLOWED_ORIGINS = [
   "http://localhost:5173",
@@ -46,67 +45,41 @@ const ALLOWED_ORIGINS = [
 
   "https://www.ytmc.co.in",
   "https://ytmc.co.in",
-  "https://ytmc-frontend.vercel.app",
   "https://ytmc-admin.vercel.app",
 
   process.env.CLIENT_ORIGIN,
   process.env.ADMIN_ORIGIN
 ].filter(Boolean);
 
-const corsOptions = {
-  origin: (origin, callback) => {
-    if (!origin) return callback(null, true);
-    if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
-
-    console.log("❌ CORS BLOCKED:", origin);
-    return callback(null, false);
-  },
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "token"]
-};
-
-// 🔥 Main CORS
-app.use(cors(corsOptions));
-
-// 🔥 SAFE preflight handler (NO CRASH)
-app.use((req, res, next) => {
-  if (req.method === "OPTIONS") {
-    res.header("Access-Control-Allow-Origin", req.headers.origin || "*");
-    res.header("Access-Control-Allow-Credentials", "true");
-    res.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
-    res.header(
-      "Access-Control-Allow-Headers",
-      "Content-Type, Authorization, token"
-    );
-    return res.sendStatus(200);
-  }
-  next();
-});
+app.use(
+  cors({
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true);
+      if (ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
+      return cb(null, false);
+    },
+    credentials: true
+  })
+);
 
 // =====================
-// HEALTH CHECK
+// HEALTH CHECK (KEEP ALIVE)
 // =====================
 app.get("/api/health", (req, res) => {
-  res.status(200).json({
-    status: "ok",
-    uptime: process.uptime()
-  });
+  res.status(200).json({ status: "ok" });
 });
 
 // =====================
-// SOCKET.IO (Optimised)
+// SOCKET.IO (FAST MODE)
 // =====================
 const server = http.createServer(app);
 
 const io = new Server(server, {
+  transports: ["websocket"], // 🔥 polling removed
   cors: {
     origin: ALLOWED_ORIGINS,
     credentials: true
-  },
-  transports: ["websocket"], // 🔥 faster than polling
-  pingTimeout: 20000,
-  pingInterval: 25000
+  }
 });
 
 app.set("io", io);
@@ -124,7 +97,7 @@ io.on("connection", (socket) => {
 });
 
 // =====================
-// ROUTES (API)
+// ROUTES
 // =====================
 app.use("/api/reviews", reviewRouter);
 app.use("/api/user", userRouter);
@@ -142,8 +115,8 @@ app.get("/", (req, res) => {
 });
 
 // =====================
-// START SERVER
+// START
 // =====================
-server.listen(port, () => {
-  console.log(`🚀 Server running on ${LOCAL_URL}`);
+server.listen(PORT, () => {
+  console.log(`🚀 Render server running on port ${PORT}`);
 });
