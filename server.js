@@ -20,7 +20,7 @@ const port = process.env.PORT || 4000;
 const LOCAL_URL = `http://localhost:${port}`;
 
 // =====================
-// CONNECT SERVICES (ONCE)
+// CONNECT SERVICES
 // =====================
 connectDB();
 connectCloudinary();
@@ -34,7 +34,7 @@ app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ extended: true }));
 
 // =====================
-// CORS CONFIG (FINAL)
+// CORS CONFIG (NODE 22 SAFE)
 // =====================
 const ALLOWED_ORIGINS = [
   // Local
@@ -45,11 +45,10 @@ const ALLOWED_ORIGINS = [
   "https://www.ytmc.co.in",
   "https://ytmc.co.in",
 
-  // Optional deployments
+  // Optional
   "https://ytmc-frontend.vercel.app",
   "https://ytmc-admin.vercel.app",
 
-  // Env based
   process.env.CLIENT_ORIGIN,
   process.env.ADMIN_ORIGIN
 ].filter(Boolean);
@@ -57,7 +56,7 @@ const ALLOWED_ORIGINS = [
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow Postman / server-to-server / health checks
+      // allow Postman / server calls
       if (!origin) return callback(null, true);
 
       if (ALLOWED_ORIGINS.includes(origin)) {
@@ -73,11 +72,11 @@ app.use(
   })
 );
 
-// ✅ Proper OPTIONS handling
-app.options("*", cors());
+// ⚠️ IMPORTANT
+// ❌ app.options("*", cors());  <-- DO NOT USE (Node 22 crash)
 
 // =====================
-// KEEP-ALIVE ROUTE
+// HEALTH CHECK
 // =====================
 app.get("/api/health", (req, res) => {
   res.status(200).json({
@@ -87,7 +86,7 @@ app.get("/api/health", (req, res) => {
 });
 
 // =====================
-// SOCKET.IO SETUP
+// SOCKET.IO
 // =====================
 const server = http.createServer(app);
 
@@ -97,7 +96,7 @@ const io = new Server(server, {
     methods: ["GET", "POST"],
     credentials: true
   },
-  transports: ["websocket"] // 🚀 fast & stable
+  transports: ["websocket"]
 });
 
 app.set("io", io);
@@ -126,7 +125,7 @@ app.use("/api/restaurant-order", restaurantOrderRouter);
 app.use("/api/menu", menuRouter);
 
 // =====================
-// ROOT TEST
+// ROOT
 // =====================
 app.get("/", (req, res) => {
   res.send("API Working – Ye Teri Meri Chai ☕");
