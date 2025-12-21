@@ -7,7 +7,7 @@ import createRazorpayInstance from "../services/razorpay.js";
 ===================================================== */
 export const createRazorpayOrder = async (req, res) => {
   try {
-    const { amount } = req.body; // ✅ FIX
+    const { amount } = req.body;
 
     if (!amount || amount <= 0) {
       return res.status(400).json({
@@ -19,14 +19,14 @@ export const createRazorpayOrder = async (req, res) => {
     const razorpay = createRazorpayInstance();
 
     const order = await razorpay.orders.create({
-      amount: Math.round(amount * 100), // paise
+      amount: Math.round(amount * 100),
       currency: "INR",
       receipt: `rcpt_${Date.now()}`
     });
 
     return res.status(200).json({
       success: true,
-      razorpayOrderId: order.id
+      razorpayOrder: order
     });
   } catch (error) {
     console.error("Razorpay Create Error:", error);
