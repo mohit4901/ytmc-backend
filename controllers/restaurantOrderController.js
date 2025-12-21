@@ -80,19 +80,29 @@ export const verifyRazorpayPayment = async (req, res) => {
     });
 
     // ✅ FIX: FORMAT ITEMS AS PER SCHEMA
-   if (!items || !Array.isArray(items) || items.length === 0) {
+ if (!items || !Array.isArray(items) || items.length === 0) {
   return res.status(400).json({
     success: false,
-    message: "Order items missing or invalid"
+    message: "Order items missing"
   });
 }
 
 const formattedItems = items.map((i) => ({
-  menuItem: i._id || i.menuItem, // fallback safety
+  menuItem: i._id || i.menuItem || null,
+
   name: i.name,
   price: i.price,
-  qty: i.qty
+  qty: i.qty || 1,
+
+  extraPrice: i.extraPrice || 0,
+  finalPrice:
+    i.finalPrice ??
+    (i.price * (i.qty || 1) + (i.extraPrice || 0)),
+
+  customisations: i.customisations || {},
+  note: i.note || ""
 }));
+
 
     // 💾 SAVE ORDER
     const newOrder = await restaurantOrderModel.create({
