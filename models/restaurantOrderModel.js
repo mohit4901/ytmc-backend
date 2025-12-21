@@ -1,22 +1,34 @@
 import mongoose from "mongoose";
 
+/* =====================================================
+   ORDER ITEM SCHEMA (UPGRADED)
+===================================================== */
 const rOrderItemSchema = new mongoose.Schema(
   {
     menuItem: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "MenuItem",
-      required: true
+      ref: "MenuItem"
     },
+
     name: { type: String, required: true },
     price: { type: Number, required: true },
-    qty: { type: Number, required: true, default: 1 }
+    qty: { type: Number, required: true, default: 1 },
+
+    // 🔥 NEW (FRONTEND MATCH)
+    extraPrice: { type: Number, default: 0 },
+    finalPrice: { type: Number, required: true },
+
+    customisations: { type: Object, default: {} },
+    note: { type: String, default: "" }
   },
   { _id: false }
 );
 
+/* =====================================================
+   RESTAURANT ORDER SCHEMA
+===================================================== */
 const restaurantOrderSchema = new mongoose.Schema(
   {
-    // 🔹 DAILY KITCHEN ORDER NUMBER (NEW)
     dailyOrderNumber: {
       type: Number,
       required: true
