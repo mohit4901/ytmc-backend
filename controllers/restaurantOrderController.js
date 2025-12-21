@@ -1,182 +1,158 @@
+import crypto from "crypto";
 import restaurantOrderModel from "../models/restaurantOrderModel.js";
 import createRazorpayInstance from "../services/razorpay.js";
 
-// ===============================
-// CREATE RAZORPAY ORDER (CUSTOMER)
-// ===============================
+/* =====================================================
+   CREATE RAZORPAY ORDER (NO DB SAVE, NO SOCKET)
+===================================================== */
 export const createRazorpayOrder = async (req, res) => {
   try {
-    const { tableNumber, customer, items, amount, note } = req.body;
+    const { total } = req.body;
 
-    if (
-      !tableNumber ||
-      !customer?.name ||
-      !customer?.phone ||
-      !items?.length ||
-      !amount
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "Missing required fields"
-      });
-    }
-
-    // 🔹 SUBTOTAL
-    const subtotal = items.reduce(
-      (sum, item) => sum + item.price * item.qty,
-      0
-    );
-
-    // 🔹 TAX (5%)
-    const tax = Math.round(subtotal * 0.05);
-    const total = subtotal + tax;
-
-    // ===============================
-    // 🔥 DAILY ORDER NUMBER (OPTIMISED)
-    // ===============================
-    const lastOrder = await restaurantOrderModel
-      .findOne({}, { dailyOrderNumber: 1 })
-      .sort({ createdAt: -1 });
-
-    const dailyOrderNumber = lastOrder
-      ? lastOrder.dailyOrderNumber + 1
-      : 1;
-
-    // ===============================
-    // RAZORPAY
-    // ===============================
     const razorpay = createRazorpayInstance();
-    const rpOrder = await razorpay.orders.create({
-      amount: total * 100,
-      currency: "INR"
+
+    const order = await razorpay.orders.create({
+      amount: Math.round(total * 100), // paise
+      currency: "INR",
+      receipt: `rcpt_${Date.now()}`
     });
 
-    // ===============================
-    // SAVE ORDER
-    // ===============================
-    const order = await restaurantOrderModel.create({
-      dailyOrderNumber,
+    return res.status(200).json({
+      success: true,
+      razorpayOrderId: order.id
+    });
+  } catch (error) {
+    console.error("Razorpay Create Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Unable to create Razorpay order"
+    });
+  }
+};
+
+/* =====================================================
+   VERIFY PAYMENT → SAVE ORDER → EMIT TO KITCHEN
+===================================================== */
+export const verifyRazorpayPayment = async (req, res) => {
+  try {
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+
       tableNumber,
-      customerName: customer.name,
-      customerMobile: customer.phone,
-
-      items: items.map(item => ({
-        menuItem: item._id,
-        name: item.name,
-        price: item.price,
-        qty: item.qty
-      })),
-
+      customerName,
+      customerMobile,
+      items,
       subtotal,
       tax,
       total,
-      notes: note || "",
-      status: "pending",
-      razorpayOrderId: rpOrder.id
-    });
+      notes
+    } = req.body;
 
-    // 🔥🔥 INSTANT SOCKET EMIT (NO WAIT)
-    const io = req.app.get("io");
-    if (io) {
-      io.to("kitchen").emit("new-order", order);
+    // 🔐 VERIFY SIGNATURE (MANDATORY)
+    const body = razorpay_order_id + "|" + razorpay_payment_id;
+
+    const expectedSignature = crypto
+      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+      .update(body.toString())
+      .digest("hex");
+
+    if (expectedSignature !== razorpay_signature) {
+      return res.status(400).json({
+        success: false,
+        message: "Payment verification failed"
+      });
     }
 
-    // 🔥 FAST RESPONSE
-    res.status(201).json({
-      success: true,
-      razorpayOrder: rpOrder,
-      orderId: order._id
+    // 🔢 DAILY ORDER NUMBER
+    const todayCount = await restaurantOrderModel.countDocuments({
+      createdAt: {
+        $gte: new Date(new Date().setHours(0, 0, 0, 0))
+      }
     });
 
-  } catch (err) {
-    console.error("Create Order Error:", err);
-    res.status(500).json({ success: false, message: err.message });
-  }
-};
+    // 💾 SAVE ORDER (PAYMENT VERIFIED)
+    const newOrder = await restaurantOrderModel.create({
+      dailyOrderNumber: todayCount + 1,
 
-// ===============================
-// VERIFY PAYMENT (LIGHTWEIGHT)
-// ===============================
-export const verifyRazorpayPayment = async (req, res) => {
-  try {
-    const { orderId, razorpayPaymentId, razorpaySignature } = req.body;
+      tableNumber,
+      customerName,
+      customerMobile,
 
-    await restaurantOrderModel.findByIdAndUpdate(orderId, {
+      items,
+      subtotal,
+      tax,
+      total,
+
+      razorpayOrderId: razorpay_order_id,
+      razorpayPaymentId: razorpay_payment_id,
+      razorpaySignature: razorpay_signature,
+
       status: "paid",
-      razorpayPaymentId,
-      razorpaySignature
+      notes
     });
 
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    // 🔔 EMIT TO KITCHEN (ONLY HERE)
+    const io = req.app.get("io");
+    io.to("kitchen").emit("new-order", newOrder);
+
+    return res.status(200).json({
+      success: true,
+      message: "Payment verified & order placed",
+      order: newOrder
+    });
+  } catch (error) {
+    console.error("Verify Payment Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error during payment verification"
+    });
   }
 };
 
-// ===============================
-// ADMIN: LIST ORDERS
-// ===============================
-export const listRestaurantOrders = async (req, res) => {
+/* =====================================================
+   ADMIN – LIST ORDERS
+===================================================== */
+export const listRestaurantOrders = async (_, res) => {
   try {
     const orders = await restaurantOrderModel
-      .find({})
+      .find()
       .sort({ createdAt: -1 });
 
-    res.json({ success: true, data: orders });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.json(orders);
+  } catch (error) {
+    res.status(500).json({ message: "Failed to fetch orders" });
   }
 };
 
-// ===============================
-// ADMIN: UPDATE STATUS
-// ===============================
+/* =====================================================
+   ADMIN – UPDATE STATUS
+===================================================== */
 export const updateRestaurantOrderStatus = async (req, res) => {
   try {
     const { orderId, status } = req.body;
 
-    const order = await restaurantOrderModel.findByIdAndUpdate(
+    const updated = await restaurantOrderModel.findByIdAndUpdate(
       orderId,
       { status },
       { new: true }
     );
 
-    const io = req.app.get("io");
-    if (io) {
-      io.to("kitchen").emit("order-updated", order);
-    }
-
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.json(updated);
+  } catch (error) {
+    res.status(500).json({ message: "Failed to update order status" });
   }
 };
 
-// ===============================
-// ADMIN: DELETE ORDER
-// ===============================
+/* =====================================================
+   ADMIN – DELETE ORDER
+===================================================== */
 export const deleteRestaurantOrder = async (req, res) => {
   try {
-    const { id } = req.params;
-
-    const deletedOrder = await restaurantOrderModel.findByIdAndDelete(id);
-    if (!deletedOrder) {
-      return res.status(404).json({
-        success: false,
-        message: "Order not found"
-      });
-    }
-
-    const io = req.app.get("io");
-    if (io) {
-      io.to("kitchen").emit("order-deleted", { orderId: id });
-    }
-
-    res.json({
-      success: true,
-      message: "Order deleted successfully"
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    await restaurantOrderModel.findByIdAndDelete(req.params.id);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to delete order" });
   }
 };
