@@ -80,12 +80,19 @@ export const verifyRazorpayPayment = async (req, res) => {
     });
 
     // ✅ FIX: FORMAT ITEMS AS PER SCHEMA
-    const formattedItems = items.map((i) => ({
-      menuItem: i._id, // REQUIRED BY SCHEMA
-      name: i.name,
-      price: i.price,
-      qty: i.qty
-    }));
+   if (!items || !Array.isArray(items) || items.length === 0) {
+  return res.status(400).json({
+    success: false,
+    message: "Order items missing or invalid"
+  });
+}
+
+const formattedItems = items.map((i) => ({
+  menuItem: i._id || i.menuItem, // fallback safety
+  name: i.name,
+  price: i.price,
+  qty: i.qty
+}));
 
     // 💾 SAVE ORDER
     const newOrder = await restaurantOrderModel.create({
