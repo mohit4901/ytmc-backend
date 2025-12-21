@@ -7,12 +7,19 @@ import createRazorpayInstance from "../services/razorpay.js";
 ===================================================== */
 export const createRazorpayOrder = async (req, res) => {
   try {
-    const { total } = req.body;
+    const { amount } = req.body; // ✅ FIX
+
+    if (!amount || amount <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid amount"
+      });
+    }
 
     const razorpay = createRazorpayInstance();
 
     const order = await razorpay.orders.create({
-      amount: Math.round(total * 100), // paise
+      amount: Math.round(amount * 100), // paise
       currency: "INR",
       receipt: `rcpt_${Date.now()}`
     });
