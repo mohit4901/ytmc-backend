@@ -50,12 +50,12 @@ export const verifyRazorpayPayment = async (req, res) => {
       notes
     } = req.body;
 
-    // 🔐 VERIFY SIGNATURE (MANDATORY)
+    // 🔐 VERIFY SIGNATURE
     const body = razorpay_order_id + "|" + razorpay_payment_id;
 
     const expectedSignature = crypto
       .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
-      .update(body.toString())
+      .update(body)
       .digest("hex");
 
     if (expectedSignature !== razorpay_signature) {
@@ -72,7 +72,15 @@ export const verifyRazorpayPayment = async (req, res) => {
       }
     });
 
-    // 💾 SAVE ORDER (PAYMENT VERIFIED)
+    // ✅ FIX: FORMAT ITEMS AS PER SCHEMA
+    const formattedItems = items.map((i) => ({
+      menuItem: i._id, // REQUIRED BY SCHEMA
+      name: i.name,
+      price: i.price,
+      qty: i.qty
+    }));
+
+    // 💾 SAVE ORDER
     const newOrder = await restaurantOrderModel.create({
       dailyOrderNumber: todayCount + 1,
 
@@ -80,7 +88,7 @@ export const verifyRazorpayPayment = async (req, res) => {
       customerName,
       customerMobile,
 
-      items,
+      items: formattedItems, // ✅ FIXED
       subtotal,
       tax,
       total,
@@ -93,9 +101,11 @@ export const verifyRazorpayPayment = async (req, res) => {
       notes
     });
 
-    // 🔔 EMIT TO KITCHEN (ONLY HERE)
+    // 🔔 EMIT TO KITCHEN (SAFE)
     const io = req.app.get("io");
-    io.to("kitchen").emit("new-order", newOrder);
+    if (io) {
+      io.to("kitchen").emit("new-order", newOrder);
+    }
 
     return res.status(200).json({
       success: true,
@@ -156,3 +166,4 @@ export const deleteRestaurantOrder = async (req, res) => {
     res.status(500).json({ message: "Failed to delete order" });
   }
 };
+
